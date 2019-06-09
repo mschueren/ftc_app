@@ -31,25 +31,35 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. */
 
 package org.firstinspires.ftc.teamcode.Driving;
 
+import android.graphics.drawable.GradientDrawable;
+
+import com.qualcomm.hardware.bosch.BNO055IMU;
 import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
 
-@TeleOp(name = "Example Drive Forward and Back", group = "DriveExample")
+import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
+import org.firstinspires.ftc.robotcore.external.navigation.AxesOrder;
+import org.firstinspires.ftc.robotcore.external.navigation.AxesReference;
+import org.firstinspires.ftc.robotcore.external.navigation.Orientation;
+
+import java.util.Locale;
+
+@TeleOp(name = "Example Drive by Gyro", group = "DriveExample")
 @Disabled
 
 public class ExampleDriveByGyro extends OpMode {
 
     DcMotor rightMotor;
     DcMotor leftMotor;
+    BNO055IMU imu;
 
-    static final double     countsPerMotorRev       = 1440;
-    static final double     wheelDiameterInches     = 4;
-    static final double     driveGearReduction      = 1;
-    static final double     countsPerInch           = countsPerMotorRev*driveGearReduction/(wheelDiameterInches*3.14);
-
-    int targetPosition = 0;
+    Orientation angles;
+    double heading;
+    int rotations = 0;
+    int targetDirection = 0;
+    double directionCorrectSpd = 0;
 
     @Override
     public void init() {
@@ -57,16 +67,21 @@ public class ExampleDriveByGyro extends OpMode {
         leftMotor = hardwareMap.dcMotor.get("left motor");
 
         rightMotor.setDirection(DcMotor.Direction.REVERSE);
-        rightMotor.setTargetPosition(targetPosition);
-        leftMotor.setTargetPosition(targetPosition);
-        rightMotor.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        leftMotor.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+
+        BNO055IMU.Parameters parameters = new BNO055IMU.Parameters();
+        parameters.angleUnit = BNO055IMU.AngleUnit.DEGREES;
+        imu = hardwareMap.get(BNO055IMU.class, "imu");
+        imu.initialize(parameters);
 
         telemetry.addData("Status:", "Robot is Initialized");
     }
 
     @Override
     public void init_loop() {
+        angles = imu.getAngularOrientation(AxesReference.INTRINSIC, AxesOrder.ZYX, AngleUnit.DEGREES);
+
+        telemetry.addData("1", "Integrated Heading: " + getIntegratedHeading());
+        telemetry.addData("2", "heading: " + angles.firstAngle);
         telemetry.addData("1 Right Motor Pos", rightMotor.getCurrentPosition());
         telemetry.addData("2 Left Motor Pos", leftMotor.getCurrentPosition());
     }
@@ -74,35 +89,36 @@ public class ExampleDriveByGyro extends OpMode {
 
     @Override
     public void start() {
-        rightMotor.setMode(DcMotor.RunMode.RUN_TO_POSITION);
-        leftMotor.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+        rightMotor.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+        leftMotor.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
     }
 
 
     @Override
     public void loop() {
-        if (!rightMotor.isBusy() && !leftMotor.isBusy()) {
-            if (targetPosition == 0) {
-                targetPosition = (int) (24 * countsPerInch);
-                rightMotor.setTargetPosition(targetPosition);
-                leftMotor.setTargetPosition(targetPosition);
+        angles = imu.getAngularOrientation(AxesReference.INTRINSIC, AxesOrder.ZYX, AngleUnit.DEGREES);
 
-            }
-            else {
-                targetPosition = 0;
-                rightMotor.setTargetPosition(targetPosition);
-                leftMotor.setTargetPosition(targetPosition);
-            }
+        if(gamepad1.dpad_left){
+            targetDirection++;
+        } else if(gamepad1.dpad_right){
+            targetDirection--;
         }
 
-
-        rightMotor.setPower(.8);
-        leftMotor.setPower(.8);
+        if(gamepad1.a) {
+            directionCorrectSpd = (targetDirection - getIntegratedHeading())/100;
+            rightMotor.setPower(.3 + directionCorrectSpd);
+            leftMotor.setPower(.3 - directionCorrectSpd);
+        }
+        else {
+            rightMotor.setPower(0);
+            leftMotor.setPower(0);
+        }
 
         // send the info back to driver station using telemetry function.
         telemetry.addData("1 Right Motor Power", rightMotor.getCurrentPosition());
         telemetry.addData("2 Left Motor Power", leftMotor.getCurrentPosition());
-        telemetry.addData("3 Target Position", targetPosition);
+        telemetry.addData("3", "Integrated Heading: " + getIntegratedHeading());
+        telemetry.addData("4", "heading: " + formatAngle(angles.angleUnit, angles.firstAngle));
     }
 
 
@@ -110,5 +126,25 @@ public class ExampleDriveByGyro extends OpMode {
     public void stop() {
         rightMotor.setPower(0);
         leftMotor.setPower(0);
+    }
+
+    String formatAngle(AngleUnit angleUnit, double angle) {
+        return formatDegrees(AngleUnit.DEGREES.fromUnit(angleUnit, angle));
+    }
+
+    String formatDegrees(double degrees){
+        return String.format(Locale.getDefault(), "%.1f", AngleUnit.DEGREES.normalize(degrees));
+    }
+
+    public double getIntegratedHeading() {
+        if(heading - (rotations * 360 + angles.firstAngle) > 200) {
+            rotations++;
+        }
+        else if(heading - (rotations * 360 + angles.firstAngle) < -200) {
+            rotations--;
+        }
+
+        heading = rotations * 360 + angles.firstAngle;
+        return heading;
     }
 }
