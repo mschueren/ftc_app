@@ -43,7 +43,6 @@ public class MentorbotRedAutoRamp extends OpMode {
         TURN_TO_CAP_BALL,
         FORWARD_TO_HIT_CAP_BALL,
         END
-
     }
 
 
@@ -53,7 +52,6 @@ public class MentorbotRedAutoRamp extends OpMode {
     @Override
     public void init() {
         robot.init(hardwareMap);
-
         programState = State.SCORE_PARTICLE;
     }
 
